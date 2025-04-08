@@ -92,8 +92,8 @@ ggplot(df, aes(x = Year + (Month - 1) / 12, y = NX)) +
 
 df$Date <- as.Date(paste(df$Year, df$Month, "01", sep = "-"))
 
-event_dates <- as.Date(c("2020-03-01","2001-09-01", "2008-09-01","2022-02-01", "1994-01-01","1989-10-01","1997-07-01" ))
-event_labels <- c("COVID-19", "9/11", "Global Financial Crisis", "Russia-Ukraine War", "NAFTA enacted (Canada, US, Mexico)", "Canada–US Free Trade Agreement (CUSFTA)","Asian Financial Crisis")
+event_dates <- as.Date(c("2020-03-01","2001-09-01", "2008-09-01","2022-02-01", "1994-01-01","1989-10-01","1997-07-01","2018-05-31", "2015-01-01" ))
+event_labels <- c("COVID-19", "9/11", "Global Financial Crisis", "Russia-Ukraine War", "NAFTA enacted (Canada, US, Mexico)", "Canada–US Free Trade Agreement (CUSFTA)","Asian Financial Crisis","2018 Tarrifs","Oil Crisis")
 
 ggplot(df, aes(x = Date, y = NX)) +
   geom_line(color = "black", size = 1) +
@@ -415,8 +415,10 @@ legend("topright",
 
 
 # a. Picking s using domain knowledge, literature
+# Non-programming. See final report
 
 # b. Observing the plots from data exploration
+# Non-programming. See final report
 
 # c. Buys-ballot table with aggregate Months, and years
 
@@ -580,6 +582,7 @@ df.sub.anova$Month <- factor(df.sub.anova$Month, levels = 1:12, labels = month.a
 anova_result <- aov(NX ~ Month, data = df.sub.anova)
 summary(anova_result)
 
+# Tukey HSD test
 TukeyHSD(anova_result)
 
 plot(TukeyHSD(anova_result), las = 1, col = "steelblue")
@@ -633,16 +636,29 @@ summary(model2.custom)
 # c. BoxCox-Transformed data fit with Auto.Arima()
 lambda_bc <- 1.5
 model3.boxcox_auto <- auto.arima(train_ts,
-                            seasonal = TRUE,
-                            lambda = lambda_bc)
+                                 seasonal = TRUE,
+                                 lambda = lambda_bc)
 
 summary(model3.boxcox_auto)
 
 # d. BoxCox-Transformed data fit with STAT 505 Manual Interpretation methods
 new_train_ts <- (train_ts^lambda_bc - 1) / lambda_bc
+
+par(mfrow = c(2,1))
+acf(new_train_ts, lag=48)
+pacf(new_train_ts, lag=48)
+
+#Try both (d = 1) and (D = 1)
+new_diff_d1 <- diff(new_train_ts, differences = 1)
+new_diff_d1_D1 <- diff(diff_d1, lag = 12)
+par(mfrow = c(2,1))
+acf(new_diff_d1_D1, main = "ACF: d = 1, D = 1", lag = 48)
+pacf(new_diff_d1_D1, main = "PACF: d = 1, D = 1", lag = 48)
+
+
 model4.boxcox_custom = arima(new_train_ts, 
-                             order=c(3,1,2), 
-                             seasonal = list(order = c(2,0,0), period = 12))
+                             order=c(1,1,1), 
+                             seasonal = list(order = c(0,1,1), period = 12))
 summary(model4.boxcox_custom)
 
 # e. Square-root Transformed data fit with Auto ARIMA
@@ -666,6 +682,8 @@ par(mfrow = c(2,1))
 acf(model1.auto$residuals)
 pacf(model1.auto$residuals)
 checkresiduals(model1.auto)
+qqnorm(residuals(model1.auto)); qqline(residuals(model1.auto), col = "red")
+hist(residuals(model1.auto), breaks = 20, col = "skyblue", main = "Residuals Histogram (Model 1)", xlab = "Residuals")
 
 # b. Model diagnostics for Interpreted ARIMA model (model2.custom)
 tsdiag(model2.custom)
@@ -679,7 +697,12 @@ hist(residuals(model2.custom), breaks = 20, col = "skyblue", main = "Residuals H
 # c. Model diagnostics for BoxCox-Transformed data fitted with Auto ARIMA (model3.boxcox_auto)
 mytsplot(model3.boxcox_auto$residuals)
 tsdiag(model3.boxcox_auto)
+par(mfrow = c(2,1))
+acf(model3.boxcox_auto$residuals)
+pacf(model3.boxcox_auto$residuals)
 checkresiduals(model3.boxcox_auto)
+qqnorm(residuals(model3.boxcox_auto)); qqline(residuals(model3.boxcox_auto), col = "red")
+hist(residuals(model3.boxcox_auto), breaks = 20, col = "skyblue", main = "Residuals Histogram (Model 3)", xlab = "Residuals")
 
 # d. Model diagnostics for BoxCox-Transformed data fitted with manual interpretation (model4.boxcox_custom)
 par(mfrow = c(2,1))
@@ -692,6 +715,13 @@ hist(residuals(model4.boxcox_custom), breaks = 20, col = "skyblue", main = "Resi
 
 
 # e. Model diagnostics for Square-Root model
+par(mfrow = c(2,1))
+acf(model5.sqrt$residuals)
+pacf(model5.sqrt$residuals)
+tsdiag(model5.sqrt)
+checkresiduals(model5.sqrt$residuals)
+qqnorm(residuals(model5.sqrt)); qqline(residuals(model5.sqrt), col = "red")
+hist(residuals(model5.sqrt), breaks = 20, col = "skyblue", main = "Residuals Histogram (Model 5)", xlab = "Residuals")
 
 
 # ============================================================================================
@@ -781,9 +811,9 @@ metrics5 <- rolling_forecast_metrics(model5.sqrt,   train_ts,
 metrics_table <- rbind(
   model1.auto   = metrics1,
   model2.custom = metrics2,
-  model3.sqrt   = metrics3,
-  model4.log    = metrics4,
-  model5.boxcox = metrics5
+  model3.boxcox_auto   = metrics3,
+  model4.boxcox_custom   = metrics4,
+  model5.sqrt = metrics5
 )
 
 print(round(metrics_table, 5))
@@ -800,7 +830,10 @@ p6 <- arma[6]
 p7 <- arma[7]
 p_total <- p1 + p2 + p3 + p4 + p6 + p7
 return(p_total)
+
 }
+
+model5.sqrt
 
 cat("model1.auto:", count_params(model1.auto), "\n")
 cat("model2.custom:  ", count_params(model2.custom), "\n")
@@ -811,8 +844,10 @@ cat("model5.sqrt:   ", count_params(model5.sqrt), "\n")
 
 
 # d. Domain Knowledge
+# Non-programming. See Report
 
 # e. Identification of best model
+# Non-programming. See Report (seems like Model 4 is best)
 
 
 
@@ -973,9 +1008,6 @@ plot_forecast_with_simulations(model5.sqrt,   "model5.sqrt", transform = "sqrt")
 
 # c. Comparison on test data set for all models
 
-library(ggplot2)
-library(forecast)
-
 # Start with autoplot using any forecast to initialize the ggplot object
 p <- autoplot(fcast1$mean, series = "Model 1: Auto") +
   autolayer(test_ts, series = "Actual 2024", linetype = "dashed", size = 1) +
@@ -1022,36 +1054,30 @@ p + scale_color_manual(
 # a. Calculation of MAE, RMSE on test set
 
 # Compute accuracy for all models on test_ts
+acc1 <- accuracy(fcast1, test_ts)
+acc2 <- accuracy(fcast2, test_ts)
 acc3 <- accuracy(fcast3, test_ts)
 acc4 <- accuracy(forecast_data_transformed, test_ts)
 acc5 <- accuracy(forecast_model5_transformed, test_ts)
 
+acc1
+acc2
+acc3
+acc4
+acc5
+
 # b. Assessment of overfitting/underfitting
+# no models are overfitting or underfitting
 
 # c. Comparison of all models
+# Model 4 outperformed all 4 other models
 
 # ============================================================================================
 # ------------------------------------13. CONCLUDING REMARKS----------------------------------                           
 # ============================================================================================
 
 # a. Which model performed the best?
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Model 4!
 
 
 
